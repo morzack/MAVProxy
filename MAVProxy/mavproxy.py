@@ -916,6 +916,16 @@ def log_paths():
             os.path.join(logdir, logname + '.raw'))
 
 
+class _NullWriter:
+    def __init__(self):
+        pass
+
+    def write(self, a):
+        pass
+    
+    def flush(self):
+        pass
+
 def open_telemetry_logs(logpath_telem, logpath_telem_raw):
     '''open log files'''
     if opts.append_log or opts.continue_mode:
@@ -924,19 +934,24 @@ def open_telemetry_logs(logpath_telem, logpath_telem_raw):
         mode = 'wb'
 
     try:
-        mpstate.logfile = open(logpath_telem, mode=mode)
-        mpstate.logfile_raw = open(logpath_telem_raw, mode=mode)
-        print("Log Directory: %s" % mpstate.status.logdir)
-        print("Telemetry log: %s" % logpath_telem)
+        if not opts.skip_logging:
+            mpstate.logfile = open(logpath_telem, mode=mode)
+            mpstate.logfile_raw = open(logpath_telem_raw, mode=mode)
+            print("Log Directory: %s" % mpstate.status.logdir)
+            print("Telemetry log: %s" % logpath_telem)
 
-        #make sure there's enough free disk space for the logfile (>200Mb)
-        #statvfs doesn't work in Windows
-        if platform.system() != 'Windows':
-            stat = os.statvfs(logpath_telem)
-            if stat.f_bfree*stat.f_bsize < 209715200:
-                print("ERROR: Not enough free disk space for logfile")
-                mpstate.status.exit = True
-                return
+            #make sure there's enough free disk space for the logfile (>200Mb)
+            #statvfs doesn't work in Windows
+            if platform.system() != 'Windows':
+                stat = os.statvfs(logpath_telem)
+                if stat.f_bfree*stat.f_bsize < 209715200:
+                    print("ERROR: Not enough free disk space for logfile")
+                    mpstate.status.exit = True
+                    return
+        else:
+            # ignore log writes when skipping log generation
+            mpstate.logfile = _NullWriter()
+            mpstate.logfile_raw = _NullWriter()
 
         # use a separate thread for writing to the logfile to prevent
         # delays during disk writes (important as delays can be long if camera
@@ -1225,6 +1240,8 @@ if __name__ == '__main__':
     parser.add_option("--logfile", dest="logfile", help="MAVLink master logfile",
                       default='mav.tlog')
     parser.add_option("-a", "--append-log", dest="append_log", help="Append to log files",
+                      action='store_true', default=False)
+    parser.add_option("--skip-logging", dest="skip_logging", help="Don't use a log file",
                       action='store_true', default=False)
     parser.add_option("--quadcopter", dest="quadcopter", help="use quadcopter controls",
                       action='store_true', default=False)
